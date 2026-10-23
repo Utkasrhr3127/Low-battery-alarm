@@ -21,6 +21,14 @@ object Prefs {
     fun repeatMin(c: Context) = sp(c).getInt("repeatMin", 2)
     fun setRepeatMin(c: Context, v: Int) = sp(c).edit().putInt("repeatMin", v).apply()
 
+    // max alarms per low-battery episode (0 = no limit)
+    fun maxAlarms(c: Context) = sp(c).getInt("maxAlarms", 2)
+    fun setMaxAlarms(c: Context, v: Int) = sp(c).edit().putInt("maxAlarms", v).apply()
+
+    // each alarm goes quiet by itself after this many seconds
+    fun ringSeconds(c: Context) = sp(c).getInt("ringSeconds", 30)
+    fun setRingSeconds(c: Context, v: Int) = sp(c).edit().putInt("ringSeconds", v).apply()
+
     fun sound(c: Context): String? = sp(c).getString("sound", null)
     fun setSound(c: Context, v: String?) = sp(c).edit().putString("sound", v).apply()
 }

@@ -29,6 +29,17 @@ class BatteryService : Service() {
     private var armed = true
     private var lastLevel = 100
     private var charging = false
+    private var fired = 0
+
+    private fun moreAllowed(): Boolean {
+        val max = Prefs.maxAlarms(this)
+        return max == 0 || fired < max
+    }
+
+    private val autoStop = Runnable {
+        AlarmPlayer.stop()
+        getSystemService(NotificationManager::class.java).cancel(ID_ALARM)
+    }
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) { handle(i) }
@@ -37,7 +48,7 @@ class BatteryService : Service() {
     private val repeater = object : Runnable {
         override fun run() {
             if (Prefs.enabled(this@BatteryService) && !charging &&
-                lastLevel <= Prefs.threshold(this@BatteryService)) {
+                lastLevel <= Prefs.threshold(this@BatteryService) && moreAllowed()) {
                 fire()
                 scheduleRepeat()
             }
@@ -90,6 +101,7 @@ class BatteryService : Service() {
                 val sticky = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
                 sticky?.let { readBattery(it) }
                 fire()
+                fired = 0
             }
             else -> {
                 val sticky = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -115,6 +127,7 @@ class BatteryService : Service() {
 
         if (charging || lastLevel > th) {
             armed = true
+            fired = 0
             handler.removeCallbacks(repeater)
             if (charging && AlarmPlayer.ringing) {
                 AlarmPlayer.stop()
@@ -130,12 +143,16 @@ class BatteryService : Service() {
     private fun scheduleRepeat() {
         handler.removeCallbacks(repeater)
         val mins = Prefs.repeatMin(this)
-        if (mins > 0) handler.postDelayed(repeater, mins * 60_000L)
+        if (mins > 0 && moreAllowed()) handler.postDelayed(repeater, mins * 60_000L)
     }
 
     @Suppress("DEPRECATION")
     private fun fire() {
+        fired++
         AlarmPlayer.start(this)
+        handler.removeCallbacks(autoStop)
+        val secs = Prefs.ringSeconds(this)
+        if (secs > 0) handler.postDelayed(autoStop, secs * 1000L)
 
         val openIntent = Intent(this, AlarmActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

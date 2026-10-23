@@ -66,6 +66,21 @@ class MainActivity : Activity() {
             Prefs.setRepeatMin(this, it)
         }
 
+        addSlider(
+            root,
+            { if (it == 0) "Max alarms per low battery: no limit" else "Ring at most $it time(s), then stay quiet until you charge" },
+            0, 5, Prefs.maxAlarms(this)
+        ) {
+            Prefs.setMaxAlarms(this, it)
+        }
+        addSlider(
+            root,
+            { if (it == 0) "Each alarm rings until I press STOP" else "Each alarm goes quiet by itself after $it sec" },
+            0, 120, Prefs.ringSeconds(this)
+        ) {
+            Prefs.setRingSeconds(this, it)
+        }
+
         val vib = Switch(this)
         vib.text = "Vibrate"
         vib.textSize = 18f
