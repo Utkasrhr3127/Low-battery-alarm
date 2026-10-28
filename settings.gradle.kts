@@ -17,4 +17,6 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "LowBatteryAlarm"
+// ignore any stray build.gradle.kts at the top level; only app/build.gradle.kts is used
+rootProject.buildFileName = "root-unused.gradle.kts"
 include(":app")
