@@ -36,7 +36,7 @@ object AlarmPlayer {
         // Force the alarm volume to the level chosen in the app
         val am = c.getSystemService(AudioManager::class.java)
         val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-        val pct = if (Prefs.gentle(c)) minOf(Prefs.volume(c), 40) else Prefs.volume(c)
+        val pct = if (Prefs.gentle(c)) Prefs.gentleVol(c) else Prefs.volume(c)
         val vol = (max * pct / 100).coerceIn(1, max)
         try { am.setStreamVolume(AudioManager.STREAM_ALARM, vol, 0) } catch (e: Exception) {}
 
@@ -49,9 +49,19 @@ object AlarmPlayer {
         }
         player?.start()
 
-        if (Prefs.vibrate(c) && !Prefs.gentle(c)) {
-            vibrator = c.getSystemService(Vibrator::class.java)
-            vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 900, 500), 0))
+        // vibration strength: 0..100 (gentle mode uses its own slider, normal mode = full)
+        val strength = if (Prefs.gentle(c)) Prefs.gentleVib(c) else if (Prefs.vibrate(c)) 100 else 0
+        if (strength > 0) {
+            val v = c.getSystemService(Vibrator::class.java)
+            vibrator = v
+            val times = longArrayOf(0, 900, 500)
+            val effect = if (v != null && v.hasAmplitudeControl()) {
+                val amp = (strength * 255 / 100).coerceIn(1, 255)
+                VibrationEffect.createWaveform(times, intArrayOf(0, amp, 0), 0)
+            } else {
+                VibrationEffect.createWaveform(times, 0)
+            }
+            v?.vibrate(effect)
         }
     }
 

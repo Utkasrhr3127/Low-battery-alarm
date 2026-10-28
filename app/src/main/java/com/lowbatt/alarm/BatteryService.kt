@@ -151,7 +151,7 @@ class BatteryService : Service() {
         fired++
         AlarmPlayer.start(this)
         handler.removeCallbacks(autoStop)
-        val secs = if (Prefs.gentle(this)) 8 else Prefs.ringSeconds(this)
+        val secs = if (Prefs.gentle(this)) Prefs.gentleSec(this) else Prefs.ringSeconds(this)
         if (secs > 0) handler.postDelayed(autoStop, secs * 1000L)
 
         val openIntent = Intent(this, AlarmActivity::class.java)

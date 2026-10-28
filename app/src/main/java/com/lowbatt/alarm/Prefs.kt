@@ -40,6 +40,14 @@ object Prefs {
     fun dark(c: Context) = sp(c).getBoolean("dark", false)
     fun setDark(c: Context, v: Boolean) = sp(c).edit().putBoolean("dark", v).apply()
 
+    // gentle mode limits (you control them)
+    fun gentleVol(c: Context) = sp(c).getInt("gentleVol", 65)
+    fun setGentleVol(c: Context, v: Int) = sp(c).edit().putInt("gentleVol", v).apply()
+    fun gentleVib(c: Context) = sp(c).getInt("gentleVib", 50)   // 0 = off
+    fun setGentleVib(c: Context, v: Int) = sp(c).edit().putInt("gentleVib", v).apply()
+    fun gentleSec(c: Context) = sp(c).getInt("gentleSec", 12)
+    fun setGentleSec(c: Context, v: Int) = sp(c).edit().putInt("gentleSec", v).apply()
+
     fun sound(c: Context): String? = sp(c).getString("sound", null)
     fun setSound(c: Context, v: String?) = sp(c).edit().putString("sound", v).apply()
 }

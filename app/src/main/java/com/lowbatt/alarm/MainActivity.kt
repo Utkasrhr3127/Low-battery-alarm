@@ -223,11 +223,7 @@ class MainActivity : Activity() {
             { if (it == 0) "RING LENGTH  until stopped" else "RING LENGTH  $it sec" },
             0, 120, Prefs.ringSeconds(this)
         ) { Prefs.setRingSeconds(this, it) }
-        switchRow(
-            snd, "Gentle mode", "40% volume, 8 sec, no vibration, screen stays off",
-            Prefs.gentle(this)
-        ) { Prefs.setGentle(this, it) }
-        switchRow(snd, "Vibrate", "Ignored while gentle mode is on", Prefs.vibrate(this)) {
+        switchRow(snd, "Vibrate", "Full strength. Used when gentle mode is off", Prefs.vibrate(this)) {
             Prefs.setVibrate(this, it)
         }
         soundLabel = label("").apply {
@@ -259,6 +255,30 @@ class MainActivity : Activity() {
         pillRow(
             snd,
             pill("TEST ALARM", true) {
+                if (!Prefs.enabled(this)) {
+                    toast("Turn the alarm ON first")
+                } else {
+                    startForegroundService(Intent(this, BatteryService::class.java).setAction("TEST"))
+                }
+            }
+        )
+
+        // ---------- 3b. Gentle mode (your own limits) ----------
+        val gen = card(root)
+        gen.addView(label("GENTLE MODE"))
+        switchRow(
+            gen, "Gentle mode ON", "Screen stays off. Uses the limits below instead of the normal ones",
+            Prefs.gentle(this)
+        ) { Prefs.setGentle(this, it) }
+        addSlider(gen, { "MAX VOLUME  $it%" }, 10, 100, Prefs.gentleVol(this)) { Prefs.setGentleVol(this, it) }
+        addSlider(
+            gen, { if (it == 0) "VIBRATION  off" else "VIBRATION  $it%" },
+            0, 100, Prefs.gentleVib(this)
+        ) { Prefs.setGentleVib(this, it) }
+        addSlider(gen, { "RING LENGTH  $it sec" }, 3, 60, Prefs.gentleSec(this)) { Prefs.setGentleSec(this, it) }
+        pillRow(
+            gen,
+            pill("TEST WITH THESE", true) {
                 if (!Prefs.enabled(this)) {
                     toast("Turn the alarm ON first")
                 } else {
