@@ -36,7 +36,8 @@ object AlarmPlayer {
         // Force the alarm volume to the level chosen in the app
         val am = c.getSystemService(AudioManager::class.java)
         val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-        val vol = (max * Prefs.volume(c) / 100).coerceIn(1, max)
+        val pct = if (Prefs.gentle(c)) minOf(Prefs.volume(c), 40) else Prefs.volume(c)
+        val vol = (max * pct / 100).coerceIn(1, max)
         try { am.setStreamVolume(AudioManager.STREAM_ALARM, vol, 0) } catch (e: Exception) {}
 
         val defaultUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
@@ -48,7 +49,7 @@ object AlarmPlayer {
         }
         player?.start()
 
-        if (Prefs.vibrate(c)) {
+        if (Prefs.vibrate(c) && !Prefs.gentle(c)) {
             vibrator = c.getSystemService(Vibrator::class.java)
             vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 900, 500), 0))
         }

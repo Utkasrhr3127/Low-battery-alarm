@@ -151,7 +151,7 @@ class BatteryService : Service() {
         fired++
         AlarmPlayer.start(this)
         handler.removeCallbacks(autoStop)
-        val secs = Prefs.ringSeconds(this)
+        val secs = if (Prefs.gentle(this)) 8 else Prefs.ringSeconds(this)
         if (secs > 0) handler.postDelayed(autoStop, secs * 1000L)
 
         val openIntent = Intent(this, AlarmActivity::class.java)
@@ -171,10 +171,10 @@ class BatteryService : Service() {
             .setCategory(Notification.CATEGORY_ALARM)
             .setOngoing(true)
             .setContentIntent(full)
-            .setFullScreenIntent(full, true)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "STOP ALARM", stop)
-            .build()
-        getSystemService(NotificationManager::class.java).notify(ID_ALARM, n)
+
+        if (!Prefs.gentle(this)) n.setFullScreenIntent(full, true)
+        getSystemService(NotificationManager::class.java).notify(ID_ALARM, n.build())
     }
 
     override fun onDestroy() {

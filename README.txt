@@ -1,3 +1,3 @@
-Low Battery Alarm - tiny Android app.
-Upload everything in this folder to a new GitHub repository.
-GitHub will build the app (APK) for you under the "Actions" tab.
+Low Battery Alarm v2 - tiny Android app.
+Upload everything in this folder to your GitHub repository.
+GitHub builds the APK under the "Actions" tab.

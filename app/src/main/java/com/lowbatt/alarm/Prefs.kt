@@ -29,6 +29,17 @@ object Prefs {
     fun ringSeconds(c: Context) = sp(c).getInt("ringSeconds", 30)
     fun setRingSeconds(c: Context, v: Int) = sp(c).edit().putInt("ringSeconds", v).apply()
 
+    // original battery capacity in mAh (Nord 2T = 4500)
+    fun designMah(c: Context) = sp(c).getInt("designMah", 4500)
+    fun setDesignMah(c: Context, v: Int) = sp(c).edit().putInt("designMah", v).apply()
+
+    // gentle mode: low volume, short beep, no vibration, screen NOT forced on
+    fun gentle(c: Context) = sp(c).getBoolean("gentle", true)
+    fun setGentle(c: Context, v: Boolean) = sp(c).edit().putBoolean("gentle", v).apply()
+
+    fun dark(c: Context) = sp(c).getBoolean("dark", false)
+    fun setDark(c: Context, v: Boolean) = sp(c).edit().putBoolean("dark", v).apply()
+
     fun sound(c: Context): String? = sp(c).getString("sound", null)
     fun setSound(c: Context, v: String?) = sp(c).edit().putString("sound", v).apply()
 }
