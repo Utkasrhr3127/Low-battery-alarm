@@ -92,7 +92,9 @@ class MainActivity : Activity() {
     private val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
     private val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
 
-    private lateinit var soundLabel: TextView
+    private var soundLabel: TextView? = null
+    private var openPanel: android.app.Dialog? = null
+    private val summaries = ArrayList<() -> Unit>()
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -114,51 +116,56 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
 
-        // keep saved values valid for the new chip controls
+        // keep saved values valid for the chip controls
         if (Prefs.repeatMin(this) < 1) Prefs.setRepeatMin(this, 2)
+        val m0 = Prefs.maxAlarms(this)
+        Prefs.setMaxAlarms(this, when (m0) { 0, 1, 2, 3, 5 -> m0; 4 -> 3; else -> 2 })
+        val g0 = Prefs.repeatMin(this)
+        Prefs.setRepeatMin(this, when { g0 in listOf(1, 2, 5, 10) -> g0; g0 <= 1 -> 1; g0 <= 3 -> 2; g0 <= 7 -> 5; else -> 10 })
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(20), dp(16), dp(40))
+            setPadding(dp(16), dp(20), dp(16), dp(16))
         }
-        setContentView(ScrollView(this).apply {
+        val outer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             setBackgroundColor(BG)
-            isVerticalScrollBarEnabled = false
-            addView(root)
+        }
+        outer.addView(
+            ScrollView(this).apply { isVerticalScrollBarEnabled = false; addView(root) },
+            LinearLayout.LayoutParams(MATCH, 0, 1f)
+        )
+        setContentView(outer)
+
+        root.addView(label("LOW BATTERY ALARM").apply {
+            setTextColor(TEXT)
+            setPadding(dp(4), dp(8), 0, dp(4))
         })
 
-        val head = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), dp(8), dp(4), dp(4))
-        }
-        head.addView(label("LOW BATTERY ALARM").apply { setTextColor(TEXT) },
-            LinearLayout.LayoutParams(0, WRAP, 1f))
-        head.addView(pill(if (Prefs.dark(this)) "LIGHT" else "DARK", false) {
-            Prefs.setDark(this, !Prefs.dark(this))
-            recreate()
-        }.apply { setPadding(dp(16), dp(8), dp(16), dp(8)) })
-        root.addView(head)
-
-        // ---------- 1. Threshold ----------
+        // ---------- Status card: on/off, level, battery bar, alarm level ----------
         val hero = card(root)
         val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        top.addView(label("RINGS AT"), LinearLayout.LayoutParams(0, WRAP, 1f))
+        val onOff = label("").apply { setTextColor(TEXT); textSize = 13f }
+        fun setOnOff(on: Boolean) { onOff.text = if (on) "ALARM  ON" else "ALARM  OFF" }
+        setOnOff(Prefs.enabled(this))
+        top.addView(onOff, LinearLayout.LayoutParams(0, WRAP, 1f))
         top.addView(styledSwitch(Prefs.enabled(this)) { on ->
             Prefs.setEnabled(this, on)
+            setOnOff(on)
             applyChanges()
         })
         hero.addView(top)
+        hero.addView(label("RINGS AT").apply { setPadding(0, dp(14), 0, 0) })
         val big = TextView(this).apply {
             text = "${Prefs.threshold(this@MainActivity)}%"
             textSize = 76f
             setTextColor(TEXT)
             typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
             includeFontPadding = false
-            setPadding(0, dp(10), 0, dp(6))
+            setPadding(0, dp(6), 0, dp(6))
         }
         hero.addView(big)
         val lb = LevelBar(this, TRACK, ACCENT, TEXT)
@@ -172,68 +179,139 @@ class MainActivity : Activity() {
             { big.text = "$it%"; lb.mark = it; lb.invalidate() },
             { Prefs.setThreshold(this, it); applyChanges() })
 
-        // ---------- 2. How many rings (buttons + slider, synced) ----------
-        val rings = card(root)
-        rings.addView(label("NUMBER OF RINGS"))
-        val ringsNow = if (Prefs.maxAlarms(this) == 0) 6 else Prefs.maxAlarms(this).coerceIn(1, 5)
-        val ringsCap = TextView(this).apply {
-            typeface = MONO; textSize = 15f; setTextColor(TEXT); setPadding(0, dp(14), 0, dp(2))
-        }
-        fun ringsText(v: Int) =
-            if (v == 6) "\u221E  keeps ringing until you charge" else "$v  then silent until you charge"
-        ringsCap.text = ringsText(ringsNow)
-        var ringsBar: SeekBar? = null
-        val paintRings = chips(
-            rings, listOf("1", "2", "3", "5", "\u221E"), listOf(1, 2, 3, 5, 6), ringsNow
-        ) { v ->
-            Prefs.setMaxAlarms(this, if (v == 6) 0 else v)
-            ringsCap.text = ringsText(v)
-            ringsBar?.progress = v - 1
-        }
-        rings.addView(ringsCap)
-        ringsBar = seek(rings, 1, 6, ringsNow,
-            { v -> ringsCap.text = ringsText(v); paintRings(v) },
-            { v -> Prefs.setMaxAlarms(this, if (v == 6) 0 else v) })
+        // ---------- Three tappable rows ----------
+        navRow(root, "Alarm behaviour", { behaviourSummary() }) { showBehaviour() }
+        navRow(root, "Alarm sound", { soundSummary() }) { showSound() }
+        navRow(root, "Device reliability", { reliabilitySummary() }) { showReliability() }
 
-        rings.addView(label("GAP BETWEEN RINGS").apply { setPadding(0, dp(22), 0, 0) })
-        val gapNow = Prefs.repeatMin(this).coerceIn(1, 10)
-        val gapCap = TextView(this).apply {
-            typeface = MONO; textSize = 15f; setTextColor(TEXT); setPadding(0, dp(14), 0, dp(2))
+        // ---------- Test button, pinned at the bottom ----------
+        val test = pill("TEST ALARM", true) {
+            if (!Prefs.enabled(this)) {
+                toast("Turn the alarm ON first")
+            } else {
+                startForegroundService(Intent(this, BatteryService::class.java).setAction("TEST"))
+            }
         }
-        gapCap.text = "$gapNow min"
-        var gapBar: SeekBar? = null
-        val paintGap = chips(
-            rings, listOf("1 min", "2 min", "5 min", "10 min"), listOf(1, 2, 5, 10), gapNow
-        ) { v ->
-            Prefs.setRepeatMin(this, v)
-            gapCap.text = "$v min"
-            gapBar?.progress = v - 1
-        }
-        rings.addView(gapCap)
-        gapBar = seek(rings, 1, 10, gapNow,
-            { v -> gapCap.text = "$v min"; paintGap(v) },
-            { v -> Prefs.setRepeatMin(this, v) })
+        test.textSize = 15f
+        test.setPadding(dp(8), dp(18), dp(8), dp(18))
+        outer.addView(test, LinearLayout.LayoutParams(MATCH, WRAP).apply {
+            setMargins(dp(16), dp(4), dp(16), dp(20))
+        })
 
-        // ---------- 3. Sound ----------
-        val snd = card(root)
-        snd.addView(label("SOUND"))
-        addSlider(snd, { "VOLUME  $it%" }, 10, 100, Prefs.volume(this)) { Prefs.setVolume(this, it) }
-        addSlider(
-            snd,
-            { if (it == 0) "RING LENGTH  until stopped" else "RING LENGTH  $it sec" },
-            0, 120, Prefs.ringSeconds(this)
-        ) { Prefs.setRingSeconds(this, it) }
-        switchRow(snd, "Vibrate", "Full strength. Used when gentle mode is off", Prefs.vibrate(this)) {
-            Prefs.setVibrate(this, it)
+        applyChanges()
+    }
+
+    override fun onDestroy() {
+        openPanel?.dismiss()
+        super.onDestroy()
+    }
+
+    // ---------- Rows + popups ----------
+
+    private fun navRow(parent: LinearLayout, title: String, sub: () -> String, onClick: () -> Unit) {
+        val row = LinearLayout(this)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.gravity = Gravity.CENTER_VERTICAL
+        row.background = rounded(CARD, 22)
+        row.setPadding(dp(18), dp(18), dp(14), dp(18))
+        val col = LinearLayout(this)
+        col.orientation = LinearLayout.VERTICAL
+        col.addView(TextView(this).apply { text = title; textSize = 17f; setTextColor(TEXT) })
+        val s = TextView(this).apply {
+            typeface = MONO; textSize = 11f; setTextColor(GREY)
+            setPadding(0, dp(4), 0, 0)
         }
-        soundLabel = label("").apply {
+        col.addView(s)
+        row.addView(col, LinearLayout.LayoutParams(0, WRAP, 1f))
+        row.addView(TextView(this).apply { text = "\u203A"; textSize = 28f; setTextColor(GREY) })
+        row.setOnClickListener { onClick() }
+        summaries.add { s.text = sub() }
+        s.text = sub()
+        parent.addView(row, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(12) })
+    }
+
+    private fun refreshSummaries() = summaries.forEach { it() }
+
+    private fun behaviourSummary(): String {
+        val n = Prefs.maxAlarms(this)
+        val rings = when (n) { 0 -> "Endless rings"; 1 -> "1 ring"; else -> "$n rings" }
+        val mode = if (Prefs.gentle(this)) "Gentle" else "Normal"
+        return "$rings \u00B7 every ${Prefs.repeatMin(this)} min \u00B7 $mode"
+    }
+
+    private fun soundSummary(): String {
+        val vol = if (Prefs.gentle(this)) Prefs.gentleVol(this) else Prefs.volume(this)
+        return "${soundName()} \u00B7 vol $vol%"
+    }
+
+    private fun reliabilitySummary(): String {
+        val ok = getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
+        return (if (ok) "Background allowed" else "Setup needed") + " \u00B7 battery health"
+    }
+
+    private fun panel(title: String, build: (LinearLayout, android.app.Dialog) -> Unit) {
+        val d = android.app.Dialog(this)
+        d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(20), dp(20), dp(20), dp(20))
+        box.addView(label(title.uppercase()).apply { setTextColor(TEXT); textSize = 12f })
+        build(box, d)
+        box.addView(pill("DONE", true) { d.dismiss() },
+            LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(22) })
+        val sc = ScrollView(this)
+        sc.isVerticalScrollBarEnabled = false
+        sc.background = rounded(BG, 26, LINE)
+        sc.addView(box)
+        d.setContentView(sc)
+        d.setOnDismissListener {
+            soundLabel = null
+            openPanel = null
+            refreshSummaries()
+        }
+        d.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        openPanel = d
+        d.show()
+        d.window?.setLayout((resources.displayMetrics.widthPixels * 0.92).toInt(), WRAP)
+    }
+
+    private fun showBehaviour() = panel("Alarm behaviour") { b, _ ->
+        b.addView(label("RINGS").apply { setPadding(0, dp(16), 0, 0) })
+        chips(b, listOf("1", "2", "3", "5", "\u221E"), listOf(1, 2, 3, 5, 0), Prefs.maxAlarms(this)) {
+            Prefs.setMaxAlarms(this, it)
+        }
+        b.addView(note("Then silent until you charge."))
+
+        b.addView(label("REPEAT EVERY").apply { setPadding(0, dp(18), 0, 0) })
+        chips(b, listOf("1 min", "2 min", "5 min", "10 min"), listOf(1, 2, 5, 10), Prefs.repeatMin(this)) {
+            Prefs.setRepeatMin(this, it)
+        }
+
+        b.addView(label("STYLE").apply { setPadding(0, dp(18), 0, 0) })
+        val modeNote = note("")
+        fun setNote() {
+            modeNote.text = if (Prefs.gentle(this))
+                "Gentle: short beep, screen stays off. Easy on a weak battery."
+            else "Normal: full-screen red alarm that wakes the screen."
+        }
+        chips(b, listOf("GENTLE", "NORMAL"), listOf(1, 0), if (Prefs.gentle(this)) 1 else 0) { v ->
+            Prefs.setGentle(this, v == 1)
+            setNote()
+        }
+        b.addView(modeNote)
+        setNote()
+    }
+
+    private fun showSound() = panel("Alarm sound") { b, _ ->
+        val sl = label("").apply {
             setTextColor(TEXT)
-            setPadding(0, dp(18), 0, 0)
+            setPadding(0, dp(16), 0, 0)
         }
-        snd.addView(soundLabel)
+        soundLabel = sl
+        b.addView(sl)
         updateSoundLabel()
         pillRow(
-            snd,
+            b,
             pill("LIST", false) {
                 val i = Intent(RingtoneManager.ACTION_RINGTONE_PICKER)
                 i.putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, RingtoneManager.TYPE_ALL)
@@ -252,56 +330,35 @@ class MainActivity : Activity() {
                 startActivityForResult(i, 11)
             }
         )
-        pillRow(
-            snd,
-            pill("TEST ALARM", true) {
-                if (!Prefs.enabled(this)) {
-                    toast("Turn the alarm ON first")
-                } else {
-                    startForegroundService(Intent(this, BatteryService::class.java).setAction("TEST"))
-                }
-            }
-        )
-
-        // ---------- 3b. Gentle mode (your own limits) ----------
-        val gen = card(root)
-        gen.addView(label("GENTLE MODE"))
-        switchRow(
-            gen, "Gentle mode ON", "Screen stays off. Uses the limits below instead of the normal ones",
-            Prefs.gentle(this)
-        ) { Prefs.setGentle(this, it) }
-        addSlider(gen, { "MAX VOLUME  $it%" }, 10, 100, Prefs.gentleVol(this)) { Prefs.setGentleVol(this, it) }
+        val g = Prefs.gentle(this)
+        b.addView(note(
+            if (g) "Sliders are for GENTLE mode (change mode in Alarm behaviour)."
+            else "Sliders are for NORMAL mode (change mode in Alarm behaviour)."
+        ))
         addSlider(
-            gen, { if (it == 0) "VIBRATION  off" else "VIBRATION  $it%" },
-            0, 100, Prefs.gentleVib(this)
-        ) { Prefs.setGentleVib(this, it) }
-        addSlider(gen, { "RING LENGTH  $it sec" }, 3, 60, Prefs.gentleSec(this)) { Prefs.setGentleSec(this, it) }
-        pillRow(
-            gen,
-            pill("TEST WITH THESE", true) {
-                if (!Prefs.enabled(this)) {
-                    toast("Turn the alarm ON first")
-                } else {
-                    startForegroundService(Intent(this, BatteryService::class.java).setAction("TEST"))
-                }
-            }
-        )
-
-        // ---------- 4. Battery ----------
-        val bat = card(root)
-        bat.addView(label("BATTERY"))
+            b, { "VOLUME  $it%" }, 10, 100,
+            if (g) Prefs.gentleVol(this) else Prefs.volume(this)
+        ) { v -> if (g) Prefs.setGentleVol(this, v) else Prefs.setVolume(this, v) }
         addSlider(
-            bat, { "ORIGINAL SIZE  $it mAh" },
-            3000, 6000, Prefs.designMah(this)
-        ) { Prefs.setDesignMah(this, it) }
-        bat.addView(note("Nord 2T = 4500 mAh."))
-        pillRow(bat, pill("CHECK HEALTH", true) { showHealth() })
+            b, { if (it == 0) "VIBRATION  off" else "VIBRATION  $it%" }, 0, 100,
+            if (g) Prefs.gentleVib(this) else Prefs.normalVib(this)
+        ) { v -> if (g) Prefs.setGentleVib(this, v) else Prefs.setNormalVib(this, v) }
+        if (g) {
+            addSlider(b, { "RING LENGTH  $it sec" }, 3, 60, Prefs.gentleSec(this)) {
+                Prefs.setGentleSec(this, it)
+            }
+        } else {
+            addSlider(
+                b, { if (it == 0) "RING LENGTH  until stopped" else "RING LENGTH  $it sec" },
+                0, 120, Prefs.ringSeconds(this)
+            ) { Prefs.setRingSeconds(this, it) }
+        }
+    }
 
-        // ---------- 5. Setup ----------
-        val setup = card(root)
-        setup.addView(label("SETUP  (ONCE)"))
+    private fun showReliability() = panel("Device reliability") { b, d ->
+        b.addView(label("SETUP  (ONCE)").apply { setPadding(0, dp(16), 0, 0) })
         pillRow(
-            setup,
+            b,
             pill("1  BACKGROUND", false) {
                 val pm = getSystemService(PowerManager::class.java)
                 if (pm.isIgnoringBatteryOptimizations(packageName)) {
@@ -322,9 +379,22 @@ class MainActivity : Activity() {
                 }
             }
         )
-        setup.addView(note("Also lock this app in your recent apps screen."))
+        b.addView(note("Also lock this app in your recent apps screen."))
 
-        applyChanges()
+        b.addView(label("BATTERY HEALTH").apply { setPadding(0, dp(22), 0, 0) })
+        addSlider(
+            b, { "ORIGINAL SIZE  $it mAh" },
+            3000, 6000, Prefs.designMah(this)
+        ) { Prefs.setDesignMah(this, it) }
+        b.addView(note("Nord 2T = 4500 mAh."))
+        pillRow(b, pill("CHECK HEALTH", true) { showHealth() })
+
+        b.addView(label("LOOK").apply { setPadding(0, dp(22), 0, 0) })
+        pillRow(b, pill(if (Prefs.dark(this)) "SWITCH TO LIGHT" else "SWITCH TO DARK", false) {
+            Prefs.setDark(this, !Prefs.dark(this))
+            d.dismiss()
+            recreate()
+        })
     }
 
     // ---------- UI helpers (no libraries, tiny) ----------
@@ -585,7 +655,8 @@ class MainActivity : Activity() {
     }
 
     private fun updateSoundLabel() {
-        soundLabel.text = "Alarm sound: ${soundName()}"
+        soundLabel?.text = "Now: ${soundName()}"
+        refreshSummaries()
     }
 
     @Suppress("DEPRECATION")

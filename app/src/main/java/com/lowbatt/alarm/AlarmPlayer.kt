@@ -50,7 +50,7 @@ object AlarmPlayer {
         player?.start()
 
         // vibration strength: 0..100 (gentle mode uses its own slider, normal mode = full)
-        val strength = if (Prefs.gentle(c)) Prefs.gentleVib(c) else if (Prefs.vibrate(c)) 100 else 0
+        val strength = if (Prefs.gentle(c)) Prefs.gentleVib(c) else Prefs.normalVib(c)
         if (strength > 0) {
             val v = c.getSystemService(Vibrator::class.java)
             vibrator = v

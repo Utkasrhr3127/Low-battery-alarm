@@ -48,6 +48,13 @@ object Prefs {
     fun gentleSec(c: Context) = sp(c).getInt("gentleSec", 12)
     fun setGentleSec(c: Context, v: Int) = sp(c).edit().putInt("gentleSec", v).apply()
 
+    // vibration strength in normal mode, 0..100 (starts from your old Vibrate switch)
+    fun normalVib(c: Context) = sp(c).getInt("normalVib", if (vibrate(c)) 100 else 0)
+    fun setNormalVib(c: Context, v: Int) = sp(c).edit().putInt("normalVib", v).apply()
+
+    fun seen(c: Context) = sp(c).getBoolean("seen", false)
+    fun setSeen(c: Context) = sp(c).edit().putBoolean("seen", true).apply()
+
     fun sound(c: Context): String? = sp(c).getString("sound", null)
     fun setSound(c: Context, v: String?) = sp(c).edit().putString("sound", v).apply()
 }
