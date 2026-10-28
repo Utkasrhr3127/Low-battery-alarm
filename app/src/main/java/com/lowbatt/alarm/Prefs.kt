@@ -52,6 +52,16 @@ object Prefs {
     fun normalVib(c: Context) = sp(c).getInt("normalVib", if (vibrate(c)) 100 else 0)
     fun setNormalVib(c: Context, v: Int) = sp(c).edit().putInt("normalVib", v).apply()
 
+    // one-time: gentle volume + vibration start at half of normal
+    fun migrateHalf(c: Context) {
+        if (sp(c).getBoolean("m3", false)) return
+        sp(c).edit()
+            .putInt("gentleVol", (volume(c) / 2).coerceAtLeast(10))
+            .putInt("gentleVib", normalVib(c) / 2)
+            .putBoolean("m3", true)
+            .apply()
+    }
+
     fun seen(c: Context) = sp(c).getBoolean("seen", false)
     fun setSeen(c: Context) = sp(c).edit().putBoolean("seen", true).apply()
 

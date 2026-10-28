@@ -100,7 +100,8 @@ class BatteryService : Service() {
             "TEST" -> {
                 val sticky = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
                 sticky?.let { readBattery(it) }
-                fire()
+                val gm = intent?.getIntExtra("gentle", -1) ?: -1
+                fire(if (gm == -1) Prefs.gentle(this) else gm == 1)
                 fired = 0
             }
             else -> {
@@ -147,11 +148,11 @@ class BatteryService : Service() {
     }
 
     @Suppress("DEPRECATION")
-    private fun fire() {
+    private fun fire(gentle: Boolean = Prefs.gentle(this)) {
         fired++
-        AlarmPlayer.start(this)
+        AlarmPlayer.start(this, gentle)
         handler.removeCallbacks(autoStop)
-        val secs = if (Prefs.gentle(this)) Prefs.gentleSec(this) else Prefs.ringSeconds(this)
+        val secs = if (gentle) Prefs.gentleSec(this) else Prefs.ringSeconds(this)
         if (secs > 0) handler.postDelayed(autoStop, secs * 1000L)
 
         val openIntent = Intent(this, AlarmActivity::class.java)
@@ -173,7 +174,7 @@ class BatteryService : Service() {
             .setContentIntent(full)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "STOP ALARM", stop)
 
-        if (!Prefs.gentle(this)) n.setFullScreenIntent(full, true)
+        if (!gentle) n.setFullScreenIntent(full, true)
         getSystemService(NotificationManager::class.java).notify(ID_ALARM, n.build())
     }
 

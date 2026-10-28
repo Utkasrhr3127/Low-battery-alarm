@@ -100,6 +100,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Prefs.migrateHalf(this)
         applyTheme()
 
         window.statusBarColor = BG
@@ -302,7 +303,54 @@ class MainActivity : Activity() {
         setNote()
     }
 
-    private fun showSound() = panel("Alarm sound") { b, _ ->
+    private fun testMode(gentle: Boolean) {
+        if (!Prefs.enabled(this)) { toast("Turn the alarm ON first"); return }
+        startForegroundService(
+            Intent(this, BatteryService::class.java).setAction("TEST").putExtra("gentle", if (gentle) 1 else 0)
+        )
+    }
+
+    private fun modeSection(b: LinearLayout, g: Boolean, d: android.app.Dialog) {
+        b.addView(label(if (g) "GENTLE MODE" else "NORMAL MODE").apply {
+            setTextColor(TEXT); setPadding(0, dp(26), 0, 0)
+        })
+        b.addView(note(
+            if (g) "Short beep, light buzz, screen stays off."
+            else "Full alarm, wakes the screen."
+        ))
+        addSlider(
+            b, { "VOLUME  $it%" }, 10, 100,
+            if (g) Prefs.gentleVol(this) else Prefs.volume(this)
+        ) { v -> if (g) Prefs.setGentleVol(this, v) else Prefs.setVolume(this, v) }
+        addSlider(
+            b, { if (it == 0) "VIBRATION  off" else "VIBRATION  $it%" }, 0, 100,
+            if (g) Prefs.gentleVib(this) else Prefs.normalVib(this)
+        ) { v -> if (g) Prefs.setGentleVib(this, v) else Prefs.setNormalVib(this, v) }
+        if (g) {
+            addSlider(b, { "RING LENGTH  $it sec" }, 3, 60, Prefs.gentleSec(this)) {
+                Prefs.setGentleSec(this, it)
+            }
+            pillRow(
+                b,
+                pill("TEST GENTLE", true) { testMode(true) },
+                pill("SET TO HALF", false) {
+                    Prefs.setGentleVol(this, (Prefs.volume(this) / 2).coerceAtLeast(10))
+                    Prefs.setGentleVib(this, Prefs.normalVib(this) / 2)
+                    d.dismiss()
+                    showSound()
+                }
+            )
+            b.addView(note("SET TO HALF = gentle volume and vibration become half of normal."))
+        } else {
+            addSlider(
+                b, { if (it == 0) "RING LENGTH  until stopped" else "RING LENGTH  $it sec" },
+                0, 120, Prefs.ringSeconds(this)
+            ) { Prefs.setRingSeconds(this, it) }
+            pillRow(b, pill("TEST NORMAL", true) { testMode(false) })
+        }
+    }
+
+    private fun showSound(): Unit = panel("Alarm sound") { b, d ->
         val sl = label("").apply {
             setTextColor(TEXT)
             setPadding(0, dp(16), 0, 0)
@@ -330,29 +378,12 @@ class MainActivity : Activity() {
                 startActivityForResult(i, 11)
             }
         )
-        val g = Prefs.gentle(this)
-        b.addView(note(
-            if (g) "Sliders are for GENTLE mode (change mode in Alarm behaviour)."
-            else "Sliders are for NORMAL mode (change mode in Alarm behaviour)."
-        ))
-        addSlider(
-            b, { "VOLUME  $it%" }, 10, 100,
-            if (g) Prefs.gentleVol(this) else Prefs.volume(this)
-        ) { v -> if (g) Prefs.setGentleVol(this, v) else Prefs.setVolume(this, v) }
-        addSlider(
-            b, { if (it == 0) "VIBRATION  off" else "VIBRATION  $it%" }, 0, 100,
-            if (g) Prefs.gentleVib(this) else Prefs.normalVib(this)
-        ) { v -> if (g) Prefs.setGentleVib(this, v) else Prefs.setNormalVib(this, v) }
-        if (g) {
-            addSlider(b, { "RING LENGTH  $it sec" }, 3, 60, Prefs.gentleSec(this)) {
-                Prefs.setGentleSec(this, it)
-            }
-        } else {
-            addSlider(
-                b, { if (it == 0) "RING LENGTH  until stopped" else "RING LENGTH  $it sec" },
-                0, 120, Prefs.ringSeconds(this)
-            ) { Prefs.setRingSeconds(this, it) }
+        b.addView(label("MODE IN USE").apply { setPadding(0, dp(22), 0, 0) })
+        chips(b, listOf("GENTLE", "NORMAL"), listOf(1, 0), if (Prefs.gentle(this)) 1 else 0) { v ->
+            Prefs.setGentle(this, v == 1)
         }
+        modeSection(b, false, d)
+        modeSection(b, true, d)
     }
 
     private fun showReliability() = panel("Device reliability") { b, d ->
